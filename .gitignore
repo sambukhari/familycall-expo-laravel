@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+mobile/.expo/
+mobile/android/
+mobile/ios/
+backend/vendor/
+backend/storage/logs/

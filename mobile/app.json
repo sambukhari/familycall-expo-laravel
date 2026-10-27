@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "FamilyCall",
+    "slug": "familycall",
+    "version": "0.1.0",
+    "orientation": "default",
+    "android": {
+      "package": "com.familycall.video",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "plugins": [
+      "@config-plugins/react-native-webrtc"
+    ],
+    "extra": {
+      "apiBaseUrl": "http://192.168.1.10:8000/api"
+    }
+  }
+}
