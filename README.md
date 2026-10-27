@@ -1,34 +1,58 @@
-# FamilyCall — Expo + Laravel starter MVP
+<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
-Private one-to-one calling concept for an Android phone and Google TV, using one Expo React Native app and a Laravel REST signaling API.
+<p align="center">
+<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+</p>
 
-**Development starter only.** This repository does not include compiled APKs or a complete Laravel framework project. Google TV camera/microphone support is unverified, and Expo Go cannot run native WebRTC.
+## About Laravel
 
-## Structure
-- `mobile/`: Expo TypeScript + React Native WebRTC caller and receiver UI.
-- `backend/`: Laravel 11/12 overlay (controller, middleware, models, routes, migration).
+Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-## Backend installation
-1. Create a fresh Laravel project with `composer create-project laravel/laravel familycall-api`.
-2. Copy everything from this repository's `backend/` into the new Laravel project, preserving folders.
-3. Put `FAMILY_CALL_SECRET=<random-long-value>` in Laravel's `.env`.
-4. Add `'family_call_secret' => env('FAMILY_CALL_SECRET'),` to `config/services.php`.
-5. In `bootstrap/app.php`, register `pair.secret` middleware alias as shown in `backend/bootstrap/app.php.example` and ensure API routes are registered via `withRouting(api: __DIR__.'/../routes/api.php', ...)`.
-6. Configure the database and run `php artisan migrate`.
-7. For local tests, run `php artisan serve --host=0.0.0.0 --port=8000`.
+- [Simple, fast routing engine](https://laravel.com/docs/routing).
+- [Powerful dependency injection container](https://laravel.com/docs/container).
+- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
+- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
+- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
+- [Robust background job processing](https://laravel.com/docs/queues).
+- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
 
-## Expo installation
-1. `cd mobile && npm install`. If versions conflict, check Expo SDK compatibility and use `npx expo install --fix`.
-2. Change `expo.extra.apiBaseUrl` in `mobile/app.json` to the reachable Laravel URL. Use HTTPS for deployment.
-3. Use the same `FAMILY_CALL_SECRET` value in both apps' pairing-secret fields. Device IDs must be `tv` and `phone`.
-4. `npx expo prebuild --platform android` then `npx expo run:android --device` for a native dev build. **Expo Go will not work.**
-5. Install the generated Android application onto Google TV if the TV supports sideloading and native camera access.
+Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
-## Known limitations
-- Both apps must be in foreground; no push notifications / background ringing.
-- No TURN server; STUN-only WebRTC may fail over cellular and NAT. Add TURN for internet calling.
-- Call race protection, device credentials, retention, and replay protection need hardening.
-- A long-lived shared secret typed in both clients is only for an MVP.
-- Android TV launcher and D-pad remote focus may need native configuration and further tests.
-- Haier TV voice-search remote microphone is not assumed accessible to other apps.
-- Not tested against the specific Haier 65-inch TV or verified as production-ready.
+## Learning Laravel
+
+Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+
+In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+
+You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+
+## Agentic Development
+
+Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+
+```bash
+composer require laravel/boost --dev
+
+php artisan boost:install
+```
+
+Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+
+## Contributing
+
+Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+
+## Code of Conduct
+
+In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+
+## Security Vulnerabilities
+
+If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+
+## License
+
+The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

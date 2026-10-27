@@ -1,0 +1,5 @@
+// In Laravel 11/12 bootstrap/app.php register:
+// ->withMiddleware(function (Middleware $middleware) {
+//   $middleware->alias(['pair.secret' => \App\Http\Middleware\PairSecret::class]);
+// })
+// In ->withRouting(), ensure api: __DIR__.'/../routes/api.php' is present.
