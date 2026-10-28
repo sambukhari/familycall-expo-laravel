@@ -1,40 +1,52 @@
 <?php
 namespace App\Services;
+
 use App\Models\FamilyDeviceToken;
-use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class FamilyPush {
-    // FCM HTTP v1 using a server-side Firebase service account. Never embed credentials in the app.
+    // Expo Push Service handles routing to FCM. Credentials belong in EAS, not this Laravel app.
     public function incoming(string $to, string $from, int $callId): void {
-        $project = (string)config('services.family_firebase_project_id');
-        $credentialFile = (string)config('services.family_firebase_credentials');
-        if (!$project || !$credentialFile || !is_readable($credentialFile)) {
-            Log::warning('FamilyCall FCM not configured');
+        $tokens = FamilyDeviceToken::where('device_id', $to)->pluck('token')->filter(
+            fn ($token) => preg_match('/^ExponentPushToken\\[[^\\]]+\\]$|^ExpoPushToken\\[[^\\]]+\\]$/', (string) $token)
+        )->values();
+        if ($tokens->isEmpty()) {
+            Log::warning('FamilyCall Expo push skipped: no registered Expo tokens', ['to' => $to, 'call_id' => $callId]);
             return;
         }
-        try {
-            $credentials = new ServiceAccountCredentials(
-                'https://www.googleapis.com/auth/firebase.messaging',
-                json_decode(file_get_contents($credentialFile), true, 512, JSON_THROW_ON_ERROR)
-            );
-            $auth = $credentials->fetchAuthToken();
-            $accessToken = $auth['access_token'] ?? null;
-            if (!$accessToken) throw new \RuntimeException('Unable to fetch FCM OAuth token');
-            foreach (FamilyDeviceToken::where('device_id', $to)->pluck('token') as $token) {
-                $response = Http::withToken($accessToken)->timeout(8)->post(
-                    'https://fcm.googleapis.com/v1/projects/'.rawurlencode($project).'/messages:send',
-                    ['message'=>[
-                        'token'=>$token,
-                        'data'=>['type'=>'incoming_call','callId'=>(string)$callId,'from'=>$from,'to'=>$to],
-                        'android'=>['priority'=>'HIGH','ttl'=>'60s'],
-                    ]]
+        foreach ($tokens->chunk(100) as $chunk) {
+            $messages = $chunk->map(fn ($token) => [
+                'to' => $token,
+                'title' => 'Incoming FamilyCall',
+                'body' => 'Call from ' . $from,
+                'sound' => 'default',
+                'priority' => 'high',
+                'ttl' => 60,
+                'channelId' => 'familycall-incoming',
+                'categoryId' => 'familycall-actions',
+                'data' => ['type' => 'incoming_call', 'callId' => (string) $callId, 'from' => $from, 'to' => $to],
+            ])->all();
+            try {
+                $response = Http::acceptJson()->asJson()->timeout(12)->retry(2, 500)->post(
+                    'https://exp.host/--/api/v2/push/send', $messages
                 );
-                if (!$response->successful()) Log::warning('FamilyCall FCM delivery failed', ['status'=>$response->status(), 'body'=>substr($response->body(),0,250)]);
+                if (!$response->successful()) {
+                    Log::error('FamilyCall Expo push HTTP failure', ['status' => $response->status(), 'body' => substr($response->body(), 0, 400)]);
+                    continue;
+                }
+                foreach (($response->json('data') ?? []) as $i => $ticket) {
+                    if (($ticket['status'] ?? null) !== 'ok') {
+                        Log::warning('FamilyCall Expo push ticket error', [
+                            'to' => $to, 'call_id' => $callId, 'error' => $ticket['details']['error'] ?? $ticket['message'] ?? 'unknown'
+                        ]);
+                    } else {
+                        Log::info('FamilyCall Expo push ticket accepted', ['to' => $to, 'call_id' => $callId, 'ticket_id' => $ticket['id'] ?? null]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::error('FamilyCall Expo push exception', ['error' => $e->getMessage()]);
             }
-        } catch (\Throwable $e) {
-            Log::warning('FamilyCall FCM exception', ['message'=>$e->getMessage()]);
         }
     }
 }
