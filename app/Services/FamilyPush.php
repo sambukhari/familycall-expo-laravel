@@ -21,7 +21,7 @@ class FamilyPush {
                 foreach(($response->json('data')??[]) as $ticket) {
                     if(($ticket['status']??'')==='ok')$sent++;else $errors++;
                 }
-            } catch (\\Throwable $e) {Log::warning('Admin Expo test notification failed',['device'=>$to,'reason'=>$e->getMessage()]);$errors+=count($payload);}
+            } catch (\Throwable $e) {Log::warning('Admin Expo test notification failed',['device'=>$to,'reason'=>$e->getMessage()]);$errors+=count($payload);}
         }
         return ['ok'=>$sent>0,'message'=>"Expo accepted {$sent} notification ticket(s); {$errors} failed. Ticket acceptance does not confirm device delivery."];
     }
