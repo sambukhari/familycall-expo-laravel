@@ -3,7 +3,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\SessionController;
 use App\Http\Controllers\Admin\DashboardController;
 
-Route::get('/',fn()=>redirect()->route('family.admin.dashboard'));
+Route::get('/',fn()=>view('welcome'));
 Route::middleware('guest')->group(function(){
  Route::get('/admin/login',[SessionController::class,'loginPage'])->name('login');
  Route::post('/admin/login',[SessionController::class,'login'])->middleware('throttle:5,1')->name('family.admin.login.submit');
