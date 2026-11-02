@@ -5,7 +5,7 @@ use App\Http\Controllers\Admin\DashboardController;
 
 Route::get('/',fn()=>redirect()->route('family.admin.dashboard'));
 Route::middleware('guest')->group(function(){
- Route::get('/admin/login',[SessionController::class,'loginPage'])->name('family.admin.login');
+ Route::get('/admin/login',[SessionController::class,'loginPage'])->name('login');
  Route::post('/admin/login',[SessionController::class,'login'])->middleware('throttle:5,1')->name('family.admin.login.submit');
 });
 Route::middleware(['auth','family.admin'])->prefix('admin')->name('family.admin.')->group(function(){
