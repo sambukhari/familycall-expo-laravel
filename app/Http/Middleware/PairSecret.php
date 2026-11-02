@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use App\Models\FamilyDevice;
 
 class PairSecret
 {
@@ -22,6 +23,15 @@ class PairSecret
             'Invalid pairing secret'
         );
 
+        $record = FamilyDevice::firstOrCreate(
+            ['device_id'=>$device],
+            ['label'=>ucfirst($device),'authorized'=>true]
+        );
+        abort_unless($record->authorized,403,'Device blocked by administrator');
+        // Throttle presence writes to protect the DB during WebRTC's frequent signaling polls.
+        if (!$record->last_seen_at || $record->last_seen_at->lt(now()->subSeconds(20))) {
+            $record->update(['last_seen_at'=>now(),'platform'=>'android']);
+        }
         return $next($request);
     }
 }
