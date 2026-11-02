@@ -19,6 +19,7 @@ return [
         ],
     ],
     'family_call_secret' => env('FAMILY_CALL_SECRET'),
+    'family_admin_email' => env('FAMILY_ADMIN_EMAIL'),
     'family_firebase_project_id' => env('FAMILY_FIREBASE_PROJECT_ID'),
     'family_firebase_credentials' => env('FAMILY_FIREBASE_CREDENTIALS'),
 ];
