@@ -15,5 +15,5 @@ class SessionController extends Controller {
   $r->session()->regenerate();
   return redirect()->route('family.admin.dashboard');
  }
- public function logout(Request $r){Auth::logout();$r->session()->invalidate();$r->session()->regenerateToken();return redirect()->route('family.admin.login');}
+ public function logout(Request $r){Auth::logout();$r->session()->invalidate();$r->session()->regenerateToken();return redirect()->route('login');}
 }
