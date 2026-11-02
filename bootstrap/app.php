@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\PairSecret;
 use App\Http\Middleware\FamilyAdmin;
+use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [HandleInertiaRequests::class]);
+        $middleware->redirectUsersTo('/admin');
         $middleware->alias([
             'pair.secret' => PairSecret::class,
             'family.admin' => FamilyAdmin::class,
