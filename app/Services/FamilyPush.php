@@ -6,6 +6,26 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class FamilyPush {
+    public function test(string $to,string $title,string $body):array {
+        $tokens=FamilyDeviceToken::where('device_id',$to)->pluck('token')->filter()->values();
+        if ($tokens->isEmpty()) return ['ok'=>false,'message'=>'No Expo token registered for this device'];
+        $sent=0;$errors=0;
+        foreach($tokens->chunk(100) as $chunk){
+            $payload=$chunk->map(fn($token)=>[
+                'to'=>$token,'title'=>$title,'body'=>$body,'sound'=>'default','priority'=>'high',
+                'ttl'=>120,'channelId'=>'familycall-incoming','data'=>['type'=>'admin_test']
+            ])->all();
+            try {
+                $response=Http::acceptJson()->asJson()->timeout(12)->post('https://exp.host/--/api/v2/push/send',$payload);
+                if(!$response->successful()){$errors+=count($payload);continue;}
+                foreach(($response->json('data')??[]) as $ticket) {
+                    if(($ticket['status']??'')==='ok')$sent++;else $errors++;
+                }
+            } catch (\\Throwable $e) {Log::warning('Admin Expo test notification failed',['device'=>$to,'reason'=>$e->getMessage()]);$errors+=count($payload);}
+        }
+        return ['ok'=>$sent>0,'message'=>"Expo accepted {$sent} notification ticket(s); {$errors} failed. Ticket acceptance does not confirm device delivery."];
+    }
+
     // Expo Push Service handles routing to FCM. Credentials belong in EAS, not this Laravel app.
     public function incoming(string $to, string $from, int $callId): void {
         $tokens = FamilyDeviceToken::where('device_id', $to)->pluck('token')->filter(
