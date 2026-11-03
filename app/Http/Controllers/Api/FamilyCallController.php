@@ -18,7 +18,16 @@ class FamilyCallController extends Controller
 
     private function authorizeCall(Request $request, FamilyCall $call): void
     {
+        $account = $request->attributes->get('family_account');
         abort_unless(in_array($this->identity($request), [$call->caller_id, $call->callee_id], true), 403);
+        $other = $call->caller_id === $this->identity($request) ? $call->callee_id : $call->caller_id;
+        if (str_starts_with($other, 'account:')) {
+            $otherAccount = FamilyAccount::find((int) substr($other, 8));
+            abort_unless($account->family_id && $otherAccount && $otherAccount->active
+                && $otherAccount->family_id === $account->family_id, 403, 'Family membership changed');
+        } else {
+            abort_unless(str_starts_with($other, 'admin:'), 403);
+        }
     }
 
     public function active(Request $request)
@@ -39,7 +48,11 @@ class FamilyCallController extends Controller
         $from = $this->identity($request);
         $to = 'account:'.$target->id;
         $call = DB::transaction(function () use ($account, $target, $from, $to, $data) {
-            FamilyAccount::whereKey([$account->id, $target->id])->orderBy('id')->lockForUpdate()->get();
+            $locked = FamilyAccount::whereKey([$account->id, $target->id])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $caller = $locked->get($account->id);
+            $recipient = $locked->get($target->id);
+            abort_unless($caller && $recipient && $caller->active && $recipient->active
+                && $caller->family_id && $caller->family_id === $recipient->family_id, 403);
             $busy = FamilyCall::whereIn('status',['ringing','connected'])
                 ->where(fn($q) => $q->whereIn('caller_id',[$from,$to])->orWhereIn('callee_id',[$from,$to]))->exists();
             abort_if($busy, 409, 'A member is already in a call');
