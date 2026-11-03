@@ -33,6 +33,9 @@ Route::prefix('account')->group(function () {
   Route::post('/calls/{call}/end', [\App\Http\Controllers\Api\FamilyCallController::class, 'end']);
   Route::get('/calls/{call}/signals', [\App\Http\Controllers\Api\FamilyCallController::class, 'signals']);
   Route::post('/calls/{call}/signals', [\App\Http\Controllers\Api\FamilyCallController::class, 'signal']);
+  Route::get('/members/{member}/messages', [\App\Http\Controllers\Api\FamilyMessageController::class, 'index'])->whereNumber('member');
+  Route::post('/members/{member}/messages', [\App\Http\Controllers\Api\FamilyMessageController::class, 'store'])->whereNumber('member')->middleware('throttle:60,1');
+  Route::post('/members/{member}/read', [\App\Http\Controllers\Api\FamilyMessageController::class, 'markRead'])->whereNumber('member');
   Route::post('/logout', [\App\Http\Controllers\Api\FamilyAccountController::class, 'logout']);
  });
 });
