@@ -26,6 +26,13 @@ Route::prefix('account')->group(function () {
  Route::middleware(\App\Http\Middleware\AuthenticateFamilyAccount::class)->group(function () {
   Route::get('/me', [\App\Http\Controllers\Api\FamilyAccountController::class, 'me']);
   Route::get('/members', [\App\Http\Controllers\Api\FamilyAccountController::class, 'members']);
+  Route::post('/push-token', [\App\Http\Controllers\Api\FamilyCallController::class, 'pushToken']);
+  Route::get('/calls/active', [\App\Http\Controllers\Api\FamilyCallController::class, 'active']);
+  Route::post('/calls', [\App\Http\Controllers\Api\FamilyCallController::class, 'start']);
+  Route::post('/calls/{call}/answer', [\App\Http\Controllers\Api\FamilyCallController::class, 'answer']);
+  Route::post('/calls/{call}/end', [\App\Http\Controllers\Api\FamilyCallController::class, 'end']);
+  Route::get('/calls/{call}/signals', [\App\Http\Controllers\Api\FamilyCallController::class, 'signals']);
+  Route::post('/calls/{call}/signals', [\App\Http\Controllers\Api\FamilyCallController::class, 'signal']);
   Route::post('/logout', [\App\Http\Controllers\Api\FamilyAccountController::class, 'logout']);
  });
 });
