@@ -19,3 +19,13 @@ Route::middleware('pair.secret')->group(function () {
  Route::get('/calls/{call}/signals', [CallController::class, 'signals']);
  Route::post('/calls/{call}/signals', [CallController::class, 'signal']);
 });
+
+Route::prefix('account')->group(function () {
+ Route::post('/register', [\App\Http\Controllers\Api\FamilyAccountController::class, 'register'])->middleware('throttle:5,1');
+ Route::post('/login', [\App\Http\Controllers\Api\FamilyAccountController::class, 'login'])->middleware('throttle:5,1');
+ Route::middleware(\App\Http\Middleware\AuthenticateFamilyAccount::class)->group(function () {
+  Route::get('/me', [\App\Http\Controllers\Api\FamilyAccountController::class, 'me']);
+  Route::get('/members', [\App\Http\Controllers\Api\FamilyAccountController::class, 'members']);
+  Route::post('/logout', [\App\Http\Controllers\Api\FamilyAccountController::class, 'logout']);
+ });
+});
