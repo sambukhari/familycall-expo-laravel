@@ -10,6 +10,8 @@ Route::middleware('guest')->group(function(){
 });
 Route::middleware(['auth','family.admin'])->prefix('admin')->name('family.admin.')->group(function(){
  Route::get('/',[DashboardController::class,'index'])->name('dashboard');
+ Route::post('/families',[\App\Http\Controllers\Admin\FamilyManagementController::class,'create'])->name('families.create');
+ Route::patch('/accounts/{account}/family',[\App\Http\Controllers\Admin\FamilyManagementController::class,'assign'])->name('accounts.family');
  Route::post('/logout',[SessionController::class,'logout'])->name('logout');
  Route::patch('/devices/{device}/authorization',[DashboardController::class,'authorizeDevice'])->name('device.auth');
  Route::patch('/devices/{device}/label',[DashboardController::class,'rename'])->name('device.label');
