@@ -27,7 +27,7 @@ class DashboardController extends Controller {
  }
  public function index(Request $r) {
   $tab=(string)$r->query('tab','overview');
-  if(!in_array($tab,['overview','devices','families','calls','messages','logs'],true))$tab='overview';
+  if(!in_array($tab,['overview','devices','families','calls','messages','logs','cameras'],true))$tab='overview';
   $devices=$this->devices();
   $calls=FamilyCall::query()->orderByDesc('id')->limit(100)->get(['id','caller_id','callee_id','status','created_at','updated_at']);
   $messages=FamilyMessage::orderByDesc('id')->limit(150)->get();
@@ -77,3 +77,4 @@ class DashboardController extends Controller {
   return back()->with('notice','Message saved and device command queued. Recipient must poll messages to display it.');
  }
 }
+

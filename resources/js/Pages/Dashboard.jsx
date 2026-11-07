@@ -1,11 +1,13 @@
 import React,{useMemo,useState} from 'react';
 import BrowserCall from './BrowserCall';
+import Cameras from './Cameras';
 import {Head,router,usePage} from '@inertiajs/react';
 import {LayoutDashboard,MonitorSmartphone,PhoneCall,MessagesSquare,ScrollText,RefreshCcw,ShieldCheck,ShieldBan,Radio,Send,Bell,Activity,Users,LogOut,Clock,Wifi,WifiOff,Search,CheckCircle2} from 'lucide-react';
 const sections=[
  {id:'overview',name:'Overview',Icon:LayoutDashboard},
  {id:'devices',name:'Devices',Icon:MonitorSmartphone},
  {id:'families',name:'Families',Icon:Users},
+ {id:'cameras',name:'TV cameras',Icon:Radio},
  {id:'calls',name:'Call history',Icon:PhoneCall},
  {id:'messages',name:'Messages',Icon:MessagesSquare},
  {id:'logs',name:'Activity log',Icon:ScrollText},
@@ -42,6 +44,7 @@ export default function Dashboard({tab='overview',viewer,summary,devices=[],fami
    <div className="topbar"><div><div className="eyebrow">FAMILYCALL / ADMINISTRATION</div><h1>{active.name}</h1><span className="muted">Private devices, calls, notifications and conversations</span></div><div className="topbar-actions"><span className="pill">● Server · {new Date(serverTime).toLocaleTimeString()}</span><Button onClick={refresh}><RefreshCcw size={14} style={{verticalAlign:'middle'}}/> Refresh</Button></div></div>
    {flash&&<div className="notice">{flash}</div>}
    {Object.values(errors||{}).map((err,i)=><div className="error" key={i}>{err}</div>)}
+   {section==='cameras'&&<Cameras accounts={accounts}/>}
    {section==='overview'&&<>
     <div className="cards"><Metric title="Registered devices" value={summary.devices} detail="Known paired endpoints" Icon={MonitorSmartphone}/><Metric title="Online now" value={summary.online} detail="Seen in last 35 seconds" Icon={Wifi}/><Metric title="Total calls" value={summary.calls} detail={summary.activeCalls+' active now'} Icon={PhoneCall}/><Metric title="Messages" value={summary.messages} detail="Saved device conversations" Icon={MessagesSquare}/></div>
     <div className="split"><Panel title="Device health" subtitle="Presence reflects recent authenticated API activity, not continuous connectivity."><div className="table-wrap"><table><thead><tr><th>Device</th><th>Connection</th><th>Access</th><th>Last seen</th></tr></thead><tbody>{devices.map(d=><tr key={d.id}><td><b>{d.label||d.device_id}</b><div className="muted">{d.device_id}</div></td><td><Status good={d.online} text={d.online?'Online':'Offline'}/></td><td><Status good={d.authorized} text={d.authorized?'Allowed':'Blocked'}/></td><td>{date(d.last_seen_at)}</td></tr>)}</tbody></table></div></Panel><Panel title="Recent calls" subtitle="Latest sessions across paired devices"><Calls calls={calls.slice(0,7)}/></Panel></div>
@@ -63,3 +66,4 @@ export default function Dashboard({tab='overview',viewer,summary,devices=[],fami
   </main>
  </div>;
 }
+

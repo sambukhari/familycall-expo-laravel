@@ -3,6 +3,13 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\DevicePushController;
 use App\Http\Controllers\Api\DeviceControlController;
+Route::post('/camera/pair', [\App\Http\Controllers\Api\CameraAgentController::class, 'pair'])->middleware('throttle:camera-pair');
+Route::prefix('camera')->middleware([\App\Http\Middleware\AuthenticateCamera::class, 'throttle:camera-agent'])->group(function () {
+ Route::post('/poll', [\App\Http\Controllers\Api\CameraAgentController::class, 'poll']);
+ Route::post('/sessions/{id}/answer', [\App\Http\Controllers\Api\CameraAgentController::class, 'answer'])->whereUuid('id');
+ Route::post('/sessions/{id}/signals', [\App\Http\Controllers\Api\CameraAgentController::class, 'signal'])->whereUuid('id');
+ Route::post('/sessions/{id}/end', [\App\Http\Controllers\Api\CameraAgentController::class, 'end'])->whereUuid('id');
+});
 Route::middleware('pair.secret')->group(function () {
  Route::post('/devices/heartbeat',[DeviceControlController::class,'heartbeat']);
  Route::get('/devices/commands',[DeviceControlController::class,'commands']);
@@ -39,3 +46,4 @@ Route::prefix('account')->group(function () {
   Route::post('/logout', [\App\Http\Controllers\Api\FamilyAccountController::class, 'logout']);
  });
 });
+

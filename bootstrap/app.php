@@ -16,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // SDP requires its final CRLF. Trimming camera signaling can make a valid offer unparsable.
+        $middleware->trimStrings(except: [fn (Request $request) => $request->is('api/camera/*', 'admin/cameras/*')]);
         $middleware->web(append: [HandleInertiaRequests::class]);
         $middleware->redirectUsersTo('/admin');
         $middleware->alias([
@@ -28,3 +30,4 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
     })->create();
+
