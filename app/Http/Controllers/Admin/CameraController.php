@@ -18,6 +18,7 @@ class CameraController extends Controller
         $unlocked = $access->unlocked($request);
 
         return response()->json([
+            'authenticator_required' => (bool) config('camera.require_authenticator'),
             'authenticator_ready' => CameraOwnerKey::where('user_id', $request->user()->id)->whereNotNull('confirmed_at')->exists(),
             'unlocked' => $unlocked, 'turn_ready' => $access->turnReady(),
             'devices' => CameraDevice::where('owner_id', $request->user()->id)->latest()->get()->map(fn ($device) => [
@@ -62,13 +63,13 @@ class CameraController extends Controller
 
     public function ice(Request $request, CameraAccess $access)
     {
-        return ['ice_servers' => $access->iceServers('viewer-'.$access->viewerHash($request))];
+        return ['ice_servers' => $access->iceServers('viewer-'.$access->viewerHash($request)),
+            'turn_ready' => $access->turnReady()];
     }
 
     public function start(Request $request, CameraDevice $device, CameraAccess $access)
     {
         abort_unless($device->owner_id === $request->user()->id, 404);
-        abort_unless($access->turnReady(), 503, 'Configure TURN before internet viewing.');
         $data = $request->validate(['offer' => 'required|array:type,sdp',
             'offer.type' => 'required|in:offer', 'offer.sdp' => 'required|string|max:100000']);
 

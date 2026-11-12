@@ -29,6 +29,7 @@ class CameraAccessTest extends TestCase
         parent::setUp();
         config(['app.key' => 'base64:'.base64_encode(str_repeat('t', 32)),
             'services.family_admin_email' => 'owner@example.test',
+            'camera.require_authenticator' => true,
             'camera.turn_urls' => ['turn:relay.example.test:3478'], 'camera.turn_secret' => str_repeat('test', 10)]);
         $this->owner = User::factory()->create(['email' => 'owner@example.test', 'password' => 'camera-test-password']);
         $this->tv = FamilyAccount::create(['username' => 'tv-camera-test', 'password' => 'device-test-password', 'device_type' => 'tv']);
@@ -212,13 +213,79 @@ class CameraAccessTest extends TestCase
         $this->assertSame($sdp, CameraViewSession::findOrFail($id)->answer['sdp']);
     }
 
-    public function test_turn_is_required_and_credentials_are_short_lived(): void
+    public function test_optional_turn_credentials_are_short_lived(): void
     {
         $this->unlock();
-        $server = $this->getJson('/admin/cameras/ice')->assertOk()->json('ice_servers.0');
+        $server = $this->getJson('/admin/cameras/ice')->assertOk()->json('ice_servers.1');
         $this->assertSame(now()->timestamp + 1200, (int) explode(':', $server['username'])[0]);
         $this->assertSame(base64_encode(hash_hmac('sha1', $server['username'], config('camera.turn_secret'), true)), $server['credential']);
         config(['camera.turn_secret' => '']);
-        $this->getJson('/admin/cameras/ice')->assertStatus(503);
+        $this->getJson('/admin/cameras/ice')->assertOk()->assertJsonCount(1, 'ice_servers')
+            ->assertJsonPath('ice_servers.0.urls.0', 'stun:stun.l.google.com:19302');
     }
+    public function test_password_unlock_works_without_authenticator_and_still_expires(): void
+    {
+        config(['camera.require_authenticator' => false]);
+        $this->actingAs($this->owner)->getJson('/admin/cameras')
+            ->assertJsonPath('authenticator_required', false)->assertJsonPath('unlocked', false);
+        $this->postJson('/admin/cameras/security/unlock', ['password' => 'wrong'])->assertStatus(422);
+        $this->getJson('/admin/cameras/ice')->assertStatus(423);
+        $this->postJson('/admin/cameras/security/unlock', ['password' => 'camera-test-password'])
+            ->assertOk()->assertJsonPath('unlocked', true)->assertJsonStructure(['csrf_token']);
+        $this->assertNull(CameraOwnerKey::where('user_id', $this->owner->id)->firstOrFail()->confirmed_at);
+        $this->getJson('/admin/cameras')->assertJsonPath('unlocked', true);
+        $this->getJson('/admin/cameras/ice')->assertOk();
+        $this->travel(31)->minutes();
+        $this->getJson('/admin/cameras/ice')->assertStatus(423);
+    }
+
+    public function test_enabling_authenticator_requirement_rejects_password_only_grants(): void
+    {
+        // Even an already enrolled owner must upgrade a password-only grant.
+        $this->unlock();
+        config(['camera.require_authenticator' => false]);
+        $this->postJson('/admin/cameras/security/unlock', ['password' => 'camera-test-password'])->assertOk();
+        $this->getJson('/admin/cameras/ice')->assertOk();
+        config(['camera.require_authenticator' => true]);
+        $this->getJson('/admin/cameras/ice')->assertStatus(423);
+        $this->postJson('/admin/cameras/security/unlock', ['password' => 'camera-test-password'])->assertUnprocessable();
+        $key = CameraOwnerKey::where('user_id', $this->owner->id)->firstOrFail();
+        $code = app(CameraTotp::class)->code($key->secret, intdiv(now()->timestamp, 30));
+        $this->postJson('/admin/cameras/security/unlock', ['password' => 'camera-test-password', 'code' => $code])->assertOk();
+        $this->getJson('/admin/cameras/ice')->assertOk();
+    }
+
+    public function test_without_turn_the_viewer_and_installed_agent_receive_compatible_stun(): void
+    {
+        config(['camera.require_authenticator' => false, 'camera.turn_urls' => [], 'camera.turn_secret' => null]);
+        $this->actingAs($this->owner)->postJson('/admin/cameras/security/unlock',
+            ['password' => 'camera-test-password'])->assertOk();
+        $ice = $this->getJson('/admin/cameras/ice')->assertOk()->assertJsonPath('turn_ready', false)->json('ice_servers');
+        $this->assertSame([['urls' => ['stun:stun.l.google.com:19302'], 'username' => '', 'credential' => '']], $ice);
+        $token = str_repeat('f', 64);
+        $id = $this->startView($this->device($token));
+        $this->withToken($token)->postJson('/api/camera/poll', [
+            'armed' => true, 'camera_available' => true, 'state' => 'ready',
+        ])->assertOk()->assertJsonPath('session.id', $id)->assertJsonPath('session.ice_servers', $ice);
+        $this->postJson('/api/camera/sessions/'.$id.'/answer', ['answer' => ['type' => 'answer', 'sdp' => 'v=0']])->assertOk();
+        $this->getJson('/admin/cameras/sessions/'.$id)->assertOk()->assertJsonPath('session.answer.type', 'answer');
+        $this->postJson('/admin/cameras/security/lock')->assertOk();
+        $this->getJson('/admin/cameras/ice')->assertStatus(423);
+        $this->assertSame('owner_locked', CameraViewSession::findOrFail($id)->end_reason);
+    }
+
+    public function test_password_grants_are_revoked_by_recovery_and_never_authorize_other_users(): void
+    {
+        config(['camera.require_authenticator' => false]);
+        $this->actingAs($this->owner)->postJson('/admin/cameras/security/unlock',
+            ['password' => 'camera-test-password'])->assertOk();
+        $id = $this->startView($this->device());
+        $this->artisan('camera:reset-authenticator', ['email' => $this->owner->email, '--force' => true])->assertSuccessful();
+        $this->getJson('/admin/cameras/ice')->assertStatus(423);
+        $this->assertSame('authenticator_reset', CameraViewSession::findOrFail($id)->end_reason);
+        $other = User::factory()->create(['email' => 'not-admin@example.test']);
+        $this->actingAs($other)->postJson('/admin/cameras/security/unlock',
+            ['password' => 'camera-test-password'])->assertForbidden();
+    }
+
 }

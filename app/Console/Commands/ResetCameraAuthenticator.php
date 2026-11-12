@@ -36,7 +36,7 @@ class ResetCameraAuthenticator extends Command
                 $access->audit('camera.authenticator.reset', $device);
             }
         });
-        $this->info('Camera access locked. Enroll a new authenticator in the admin panel.');
+        $this->info('Camera access locked. Unlock again in admin; enroll an authenticator if it is required.');
 
         return self::SUCCESS;
     }

@@ -1,124 +1,89 @@
 # Private TV camera access
 
-Branch: `feature/tv-camera-agent` in both FamilyCall repositories. This adds an owner-only **TV cameras** section and a separate Android app, **FamilyCall Camera** (`com.familycall.camera`). The normal FamilyCall app remains installed for calls and chat.
+Branch: `feature/tv-camera-agent` in both repositories. The existing FamilyCall app handles family calls and chat; the separate FamilyCall Camera app handles owner camera viewing.
 
-## What it does
+## Everyday use
 
-- Pair a camera with a one-time, 10-minute code. The device bearer is stored hashed on Laravel and encrypted with Android Keystore on the TV.
-- Require the administrator password and an authenticator code before pairing, revoking, or viewing. Unlock lasts 30 minutes; **Lock access** ends this browser's stream immediately.
-- Send video only through WebRTC. The viewer never requests the administrator's camera or microphone. There is no recording or public camera URL.
-- Allow one viewer per camera, for at most 15 minutes. The browser sends a heartbeat; abandoned sessions expire after 30 seconds. The TV also closes capture if authenticated polling fails for 10 seconds or its server-issued lease expires.
-- Release the camera when its linked FamilyCall TV account has a ringing/connected call. Polling and Android camera priority handle the handoff; verify the handoff on the actual TV.
-- Log pairing, revocation and viewing start/end metadata. SDP and candidates are cleared when sessions end. Scheduled cleanup removes abandoned signaling and session records older than seven days.
+1. Once on the TV: pair FamilyCall Camera, grant camera and notification permissions, choose the USB camera and press **Enable remote access**.
+2. Press Home and use the TV normally. Keep it powered, awake and online.
+3. Open https://tv.theartvalley.net/admin/?tab=cameras, sign in as the administrator, and unlock camera access with your administrator password.
+4. Click **View camera**. No TV-side answer button is needed. Click **Stop viewing** when finished.
 
-Anyone with your administrator password **and** authenticator, or control of the server, can act as you. Keep both private. This feature does not share camera access with family members.
+The TV retains its pairing. Do not generate another pairing code or rebuild the APK when updating only the backend. The already installed first version of Camera Agent understands the STUN configuration returned by this backend.
 
-## Android background behavior
+## Update an already deployed camera backend
 
-Open the companion on the TV, grant camera and notification permissions, and press **Enable remote access**. Its camera foreground service can continue after returning to the home screen. A persistent notification provides a Stop control; Android also shows its camera indicator while capturing.
+No new migration or Composer dependency is introduced by the simplified access update.
 
-Android does not guarantee an ordinary app will run forever. After a reboot, force-stop, permission removal, or OEM service termination, reopen it and enable access. The boot receiver only posts a reminder; it does not bypass Android's camera restrictions. The TV must remain powered, awake, online and attached to the USB camera. Deep standby may power off USB/network. A timed CPU wake lock is used only during viewing, not to turn on the screen.
-
-The app uses external cameras exposed through Android Camera2. It cannot add missing USB drivers. Your previously detected Etron webcam exposed video interfaces only, so this companion intentionally requests no microphone permission.
-
-## 1. Prepare the relay
-
-The Laravel website handles authentication and signaling; it is not the media relay. Configure a separate **Coturn server using TURN REST shared-secret authentication**, or a compatible managed service. Do this on a VPS/provider that permits a long-running TURN service and its network ports. Shared PHP hosting alone is insufficient.
-
-Use a current Coturn release and its documented configuration. Required settings include `use-auth-secret`, a unique `static-auth-secret` of at least 32 characters, and your relay's `realm`. Keep the secret server-side. Configure listener/relay addresses and firewall ports for your provider, disable anonymous relay access, retain loopback protection, deny private/internal peer networks, and set allocation/bandwidth limits. A TURN TLS listener requires a certificate trusted by Android and browsers for the relay hostname. The website's HTTPS certificate does not configure that listener.
-
-Use actual working URLs, for example:
-
-```dotenv
-CAMERA_TURN_URLS="turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349?transport=tcp"
-CAMERA_TURN_SECRET="YOUR_PRIVATE_COTURN_SHARED_SECRET"
-```
-
-These are placeholders. Put the same shared secret in Coturn and the backend `.env`. Never put it in JavaScript, the APK, Git, a screenshot, or an admin message. Laravel issues credentials valid for 20 minutes to each authorized session. Static TURN usernames/passwords and provider-specific token APIs are not supported by this adapter. Pairing works before relay setup; viewing deliberately stays disabled until relay configuration is present. Configuration presence alone does not prove relay connectivity.
-
-## 2. Deploy Laravel on Hostinger
-
-Back up the database through your hosting panel first. This migration is additive; it does not replace family accounts or calls. No Laravel Boost installation is needed.
+On Hostinger:
 
 ```bash
 cd ~/domains/tv.theartvalley.net/public_html
 git status --short
-```
-
-If `composer.lock` still has your previous server-only repair, preserve it before switching:
-
-```bash
-git stash push -m "Composer lock before TV camera branch" -- composer.lock
-```
-
-Preserve any other local changes separately; do not reset them. Then:
-
-```bash
-git fetch origin
-git switch feature/tv-camera-agent
 git pull --ff-only origin feature/tv-camera-agent
-composer validate --no-check-publish
-composer install --no-dev --prefer-dist --optimize-autoloader --no-scripts
+php -d 'disable_functions=system,shell_exec,exec,passthru,mysql_list_dbs,ini_alter,dl,symlink,link,chgrp,leak,popen,apache_child_terminate,virtual,mb_send_mail' artisan optimize:clear
 ```
 
-The branch includes a repaired Composer lock with Inertia. Use **PHP 8.4.1 or newer** for these locked dependencies. Your reported Hostinger PHP 8.4.27 meets that requirement; your earlier Mac PHP 8.3 does not. A pre-existing `google/auth` wildcard warning from validation is not a lock-file failure.
+Preserve any local changes before pulling; do not reset them. Existing camera rows and TV credentials remain valid.
 
-For the Hostinger CLI restrictions already observed, use this command-local override. It enables `proc_open` for these Artisan commands while retaining the other previously listed restrictions:
-
-```bash
-fcphp() {
-  php -d 'disable_functions=system,shell_exec,exec,passthru,mysql_list_dbs,ini_alter,dl,symlink,link,chgrp,leak,popen,apache_child_terminate,virtual,mb_send_mail' "$@"
-}
-fcphp artisan package:discover
-fcphp artisan migrate --force
-fcphp artisan optimize:clear
-```
-
-Add the relay values from step 1 to the server `.env`. Keep the existing `APP_KEY`; changing it would invalidate encrypted data. Ensure HTTPS, `APP_DEBUG=false`, `SESSION_SECURE_COOKIE=true`, and the existing `FAMILY_ADMIN_EMAIL` are configured. Run `fcphp artisan optimize:clear` after editing the environment.
-
-Schedule Laravel's `artisan schedule:run` once per minute with your hosting panel's cron facility if not already configured. Use the same PHP binary and CLI override if that cron environment disables `proc_open`. The schedule calls `camera:prune` in-process. A missed cron does not let the TV stream past its local lease; cron ensures abandoned signaling data is cleaned promptly.
-
-## 3. Build and upload the admin frontend from the Mac
-
-Use the backend clone that contains `package.json` and `artisan`. Your last reported clone was:
+On the Mac, rebuild and upload the admin frontend:
 
 ```bash
 cd /Users/sambukhari/Desktop/Ali/familycall-expo-laravel/laravel-backend-giit
 git status --short
-git fetch origin
-git switch feature/tv-camera-agent
 git pull --ff-only origin feature/tv-camera-agent
 npm ci
 npm run build
 scp -P 65002 -r public/build u220278738@72.61.121.23:domains/tv.theartvalley.net/public_html/public/
 ```
 
-Use Node 22.12+ or a supported newer LTS. If your backend clone is the parent directory instead, change the `cd` accordingly. Frontend compilation needs Node, not the Mac's PHP. On Hostinger, run `fcphp artisan optimize:clear` again, then open `https://tv.theartvalley.net/admin/?tab=cameras`.
+Use the clone containing `artisan` and `package.json`; adjust the directory if your clone is elsewhere. Refresh the admin page after uploading the matching build. If `CAMERA_REQUIRE_AUTHENTICATOR=true` was explicitly added to the server environment, change it to `false` and clear the configuration cache for password-only access.
 
-## 4. Build and install the separate camera app
+## Connections
 
-In `sambukhari/tv-call`, check out the same branch and follow [`camera-agent/README.md`](https://github.com/sambukhari/tv-call/blob/feature/tv-camera-agent/camera-agent/README.md). The companion is a standalone native Gradle project. It does not use Expo Go or require rebuilding the normal FamilyCall app.
+Camera viewing now tries a normal WebRTC connection with the same Google STUN discovery endpoint as FamilyCall. TURN configuration is optional; its absence no longer blocks the View button or signaling.
 
-## 5. Pair and verify
+A direct connection can still fail through restrictive routers, firewalls or carrier NAT. No code can guarantee that every pair of networks allows a direct connection. If needed, configure a compatible hosted TURN service or Coturn relay; Laravel remains on its existing hosting. This application does not require buying a VPS just to attempt viewing.
 
-1. In **Admin → TV cameras**, enter the admin password, add the displayed key to an authenticator app as a time-based account, then enter its six-digit code. Keep your device clock correct. Used codes cannot be replayed.
-2. Create a camera entry and select the **TV's existing FamilyCall account**, not a phone account. Copy the one-time pairing code.
-3. On the TV companion, enter your HTTPS site root and pairing code. Choose the external USB camera and enable remote access. Press Home on the TV remote.
-4. In admin, select **View camera**. Initially test locally, then test from mobile data or another network. Video should appear; no audio is expected.
-5. Stop viewing, close the tab, disconnect the network, revoke the camera, and start a FamilyCall call in separate tests. Confirm the camera indicator turns off and capture stops. Re-enable/re-pair only when the UI asks.
-6. Test a TV restart: the app should require explicit enablement again. Do not expect silent automatic camera access after reboot.
+Optional server-only settings:
 
-No physical-TV or real-relay test can be inferred from a successful build. Check these cases on the Haier TV before relying on unattended access.
+```dotenv
+CAMERA_TURN_URLS="turn:YOUR_RELAY_HOST:3478?transport=udp,turns:YOUR_RELAY_HOST:5349?transport=tcp"
+CAMERA_TURN_SECRET="YOUR_PRIVATE_RELAY_SHARED_SECRET"
+```
 
-## Recovery and rollback
+Use working URLs and a matching Coturn REST-auth shared secret of at least 32 characters. These are placeholders, not a deployed relay. Static usernames/passwords and provider-specific token APIs need a different adapter. Never commit the shared secret or put it in the APK. The backend issues short-lived credentials; setting variables alone does not prove connectivity. Retain authenticated relay access, private/loopback peer protection and bandwidth limits. TURN TLS needs its own trusted relay certificate.
 
-- Lost authenticator: from authenticated SSH, run `fcphp artisan camera:reset-authenticator YOUR_ADMIN_EMAIL`. Confirm the prompt. This ends viewing sessions and invalidates existing camera unlock grants; enroll again in admin. There is no password-only web reset.
-- Revoked camera: its device bearer stops working. Create a new pairing code and pair the TV again.
-- Missing picture: check the TV is enabled, camera permissions are allowed, no FamilyCall call is active, and the relay is reachable. Never post bearer tokens, pairing codes, SDP, candidates, or TURN credentials in logs.
-- Rollback: stop remote access on the TV first. Switch both repositories back to `feature/family-accounts-calling` (the immediate previous system), rebuild/upload its admin assets and install dependencies from its matching lock. `main` remains the older backup. New camera tables can remain unused; do not run a general `migrate:rollback` against family data.
+## Administrator access
 
-## Reference
+Password-only camera unlock is the default. Authentication, administrator authorization, CSRF protection, password throttling, camera ownership, session expiry, revocation and audit events remain enforced. Unlock lasts 30 minutes; one viewer can watch a camera for up to 15 minutes. Lock access ends the current browser's stream.
 
-- [Android camera foreground service requirements](https://developer.android.com/develop/background-work/services/fgs/service-types#camera)
-- [Coturn configuration reference](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf)
-- [WebRTC TURN connectivity](https://webrtc.org/getting-started/turn-server)
+To opt into password plus authenticator:
+
+```dotenv
+CAMERA_REQUIRE_AUTHENTICATOR=true
+```
+
+Clear configuration caches after changing it. Existing authenticator enrollment is preserved. When enabling this requirement, a previous password-only grant cannot satisfy it; unlock again with the authenticator. An administrator with your password can access your cameras in password-only mode.
+
+SSH recovery: `php artisan camera:reset-authenticator YOUR_ADMIN_EMAIL` ends all viewing, removes that owner's grant identity and invalidates existing unlocks. Use the Hostinger PHP override above when necessary. Enroll again if authenticator mode is enabled.
+
+## Pairing for a new TV
+
+In Admin → TV cameras, unlock and create a camera entry linked to the TV's existing FamilyCall account. Enter the one-time code and `https://tv.theartvalley.net` in the TV companion. Codes last 10 minutes and can be used once. Camera device credentials remain hashed on Laravel and encrypted with Android Keystore on the TV.
+
+For a first backend installation, deploy this branch with PHP 8.4.1+, run `composer install --no-dev --prefer-dist --optimize-autoloader --no-scripts`, `artisan package:discover`, `artisan migrate --force`, and `artisan optimize:clear` using the Hostinger PHP override. Keep the existing APP_KEY and family account data. Build/upload the admin assets as above. No Boost installation is needed.
+
+## Background behavior and verification
+
+The service is enabled while its TV activity is visible. It can wait in the background while watching TV, and opens the camera only during an authorized viewing session. A persistent notification and Android's camera indicator remain visible; local Stop and admin Revoke remain available. No home-router port forwarding is required.
+
+Android/OEM firmware can stop services. After reboot, force-stop, or service termination, reopen FamilyCall Camera and enable access again. Deep standby may power off USB or networking. This is not guaranteed off/standby camera access. FamilyCall calls take camera priority. The companion sends video only; the detected Etron webcam did not expose a USB microphone.
+
+Test View/Stop locally, then from mobile data. Test normal TV playback, network loss, closing the browser, admin Lock, Revoke and a FamilyCall call. Capture must stop on expired viewer/network leases. A successful build does not verify physical camera capture or connectivity on your actual networks.
+
+Schedule `artisan schedule:run` once per minute for abandoned-session cleanup. Keep HTTPS, APP_DEBUG=false, SESSION_SECURE_COOKIE=true and FAMILY_ADMIN_EMAIL configured. Never post passwords, pairing codes, device tokens, authenticator secrets, SDP or TURN secrets.
+
+Rollback: stop remote access first, switch to the previously deployed commit and rebuild its matching admin assets. Camera tables can remain unused; do not broadly roll back family migrations.
+
+References: [Android camera service requirements](https://developer.android.com/develop/background-work/services/fgs/service-types#camera), [WebRTC TURN connectivity](https://webrtc.org/getting-started/turn-server), [Coturn configuration](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf).

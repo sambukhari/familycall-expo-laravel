@@ -13,11 +13,19 @@ class CameraAccess
 {
     public function unlocked(Request $request): bool
     {
+        $key = CameraOwnerKey::whereKey($request->session()->get('camera_key_id'))
+            ->where('user_id', $request->user()->id);
+        if (config('camera.require_authenticator')) {
+            $key->whereNotNull('confirmed_at');
+            if ($request->session()->get('camera_auth_method', 'totp') !== 'totp') {
+                return false;
+            }
+        }
+
         return $request->session()->get('camera_owner_id') === $request->user()->id
             && $request->session()->get('camera_access_until', 0) > now()->timestamp
             && $request->session()->has('camera_viewer_id')
-            && CameraOwnerKey::whereKey($request->session()->get('camera_key_id'))
-                ->where('user_id', $request->user()->id)->whereNotNull('confirmed_at')->exists();
+            && $key->exists();
     }
 
     public function viewerHash(Request $request): string
@@ -37,11 +45,17 @@ class CameraAccess
 
     public function iceServers(string $identity): array
     {
-        abort_unless($this->turnReady(), 503, 'Configure CAMERA_TURN_URLS and CAMERA_TURN_SECRET before internet viewing.');
+        // Empty credentials keep STUN compatible with already installed TV agents.
+        $servers = [['urls' => config('camera.stun_urls'), 'username' => '', 'credential' => '']];
+        if (! $this->turnReady()) {
+            return $servers;
+        }
         $username = (now()->timestamp + 1200).':camera-'.$identity;
 
-        return [['urls' => $this->turnUrls(), 'username' => $username,
-            'credential' => base64_encode(hash_hmac('sha1', $username, (string) config('camera.turn_secret'), true))]];
+        $servers[] = ['urls' => $this->turnUrls(), 'username' => $username,
+            'credential' => base64_encode(hash_hmac('sha1', $username, (string) config('camera.turn_secret'), true))];
+
+        return $servers;
     }
 
     public function busy(CameraDevice $device): bool

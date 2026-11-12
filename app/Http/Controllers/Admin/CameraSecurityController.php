@@ -24,7 +24,7 @@ class CameraSecurityController extends Controller
                 }
             }
         });
-        $request->session()->forget(['camera_owner_id', 'camera_key_id', 'camera_access_until', 'camera_viewer_id']);
+        $request->session()->forget(['camera_owner_id', 'camera_key_id', 'camera_access_until', 'camera_viewer_id', 'camera_auth_method']);
 
         return response()->json(['unlocked' => false])->header('Cache-Control', 'no-store');
     }
@@ -32,7 +32,7 @@ class CameraSecurityController extends Controller
     private function password(Request $request): void
     {
         $request->validate(['password' => 'required|string|max:1024']);
-        abort_unless(Hash::check($request->string('password')->toString(), $request->user()->password), 422, 'Password or authenticator code is incorrect.');
+        abort_unless(Hash::check($request->string('password')->toString(), $request->user()->password), 422, 'Administrator password is incorrect.');
     }
 
     public function enroll(Request $request, CameraTotp $totp)
@@ -56,6 +56,15 @@ class CameraSecurityController extends Controller
     public function unlock(Request $request, CameraTotp $totp)
     {
         $this->password($request);
+        if (! config('camera.require_authenticator')) {
+            return DB::transaction(function () use ($request, $totp) {
+                $request->user()->newQuery()->whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+                // Retain a revocable grant identity, even without authenticator enrollment.
+                $key = CameraOwnerKey::firstOrCreate(['user_id' => $request->user()->id],
+                    ['secret' => $totp->generateSecret()]);
+                return $this->grant($request, $key, 'password');
+            });
+        }
         $data = $request->validate(['code' => ['required', 'regex:/^[0-9]{6}$/D']]);
 
         return DB::transaction(function () use ($request, $totp, $data) {
@@ -68,16 +77,21 @@ class CameraSecurityController extends Controller
             $counter = $totp->verify($key->secret, $data['code'], $key->last_counter);
             abort_if($counter === null, 422, 'Password or authenticator code is incorrect. Wait for a new code if this one was already used.');
             $key->update(['confirmed_at' => $key->confirmed_at ?? now(), 'last_counter' => $counter]);
-            $request->session()->regenerate();
-            $request->session()->forget('camera_enrollment_id');
-            $request->session()->put([
-                'camera_owner_id' => $request->user()->id,
-                'camera_key_id' => $key->id,
-                'camera_access_until' => now()->timestamp + config('camera.unlock_seconds'),
-                'camera_viewer_id' => Str::random(64),
-            ]);
-
-            return response()->json(['unlocked' => true, 'csrf_token' => csrf_token()])->header('Cache-Control', 'no-store');
+            return $this->grant($request, $key, 'totp');
         });
+    }
+    private function grant(Request $request, CameraOwnerKey $key, string $method)
+    {
+        $request->session()->regenerate();
+        $request->session()->forget('camera_enrollment_id');
+        $request->session()->put([
+            'camera_owner_id' => $request->user()->id,
+            'camera_key_id' => $key->id,
+            'camera_auth_method' => $method,
+            'camera_access_until' => now()->timestamp + config('camera.unlock_seconds'),
+            'camera_viewer_id' => Str::random(64),
+        ]);
+
+        return response()->json(['unlocked' => true, 'csrf_token' => csrf_token()])->header('Cache-Control', 'no-store');
     }
 }

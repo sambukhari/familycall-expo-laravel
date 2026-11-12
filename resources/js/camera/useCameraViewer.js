@@ -31,6 +31,9 @@ export function useCameraViewer() {
       if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error('Open the admin panel over HTTPS in a browser that supports WebRTC.');
       const config = await cameraRequest('/ice');
       if (g !== generation.current) return;
+      const connectionFailure = config.turn_ready
+        ? 'The TV could not connect. Check its connection and try again.'
+        : 'The TV could not connect across this network. Try another network; a video relay may be needed.';
       const connection = new RTCPeerConnection({iceServers: config.ice_servers});
       current = {connection, media: new MediaStream(), id: null, queue: [], remote: [], cursor: 0, heartbeat: 0, lastPoll: Date.now()};
       active.current = current;
@@ -49,7 +52,7 @@ export function useCameraViewer() {
         if (connection.connectionState === 'connected') {
           clearTimeout(current.connectTimer); clearTimeout(current.disconnectTimer); update('live');
         } else if (connection.connectionState === 'failed') {
-          void stop(); setError('The video connection failed. Check the TV and TURN service, then try again.');
+          void stop(); setError(connectionFailure);
         } else if (connection.connectionState === 'disconnected') {
           update('reconnecting');
           clearTimeout(current.disconnectTimer);
@@ -69,7 +72,7 @@ export function useCameraViewer() {
       current.id = result.session.id;
       update('connecting');
       current.connectTimer = setTimeout(() => {
-        if (active.current === current) {void stop(); setError('The camera did not connect within 35 seconds.');}
+        if (active.current === current) {void stop(); setError(connectionFailure);}
       }, 35000);
 
       async function poll() {
