@@ -17,7 +17,10 @@ jobs:
           tools: composer:v2
           coverage: none
       - run: composer install --no-interaction --prefer-dist
-      - run: vendor/bin/phpunit
+      - name: Test Laravel
+        run: |
+          export APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+          vendor/bin/phpunit
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
